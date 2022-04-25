@@ -1,4 +1,4 @@
-### directly adapts from rllib's centralized_critique_models.py
+### directly adapts from rllib's centralized_critic_models.py
 
 from gym.spaces import Box
 from ray.rllib.models.modelv2 import ModelV2

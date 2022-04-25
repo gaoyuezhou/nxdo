@@ -40,7 +40,7 @@ from ray.rllib.models import MODEL_DEFAULTS
 from ray.rllib.utils import merge_dicts
 from grl.envs.tiny_bridge_2p_multi_agent_env  import TinyBridge2pMultiAgentEnv
 from grl.rllib_tools.models.valid_actions_fcnet import get_valid_action_fcn_class_for_env
-from grl.rl_apps.centralized_critique_model import TorchCentralizedCriticModel
+from grl.rl_apps.centralized_critic_model import TorchCentralizedCriticModel
 
 torch, nn = try_import_torch()
 

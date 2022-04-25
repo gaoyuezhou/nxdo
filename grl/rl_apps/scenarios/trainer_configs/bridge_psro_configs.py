@@ -15,7 +15,7 @@ from grl.rllib_tools.valid_actions_epsilon_greedy import ValidActionsEpsilonGree
 
 from grl.envs.tiny_bridge_2p_multi_agent_env  import TinyBridge2pMultiAgentEnv
 from grl.rllib_tools.models.valid_actions_fcnet import get_valid_action_fcn_class_for_env
-from grl.rl_apps.centralized_critique_model import TorchCentralizedCriticModel
+from grl.rl_apps.centralized_critic_model import TorchCentralizedCriticModel
 
 from gym.spaces import Discrete
 
