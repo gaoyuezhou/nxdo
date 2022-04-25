@@ -38,7 +38,7 @@ def psro_tiny_bridge_ccppo_params(env: MultiAgentEnv) -> Dict[str, Any]:
         "num_workers": 0,
         "multiagent": {
             "policies": {
-                "pol1": (None, tmp_env.observation_space, Discrete(7), {
+                "pol1": (None, tmp_env.observation_space, tmp_env.action_space, {
                     "framework": "torch",
                 }),
             },

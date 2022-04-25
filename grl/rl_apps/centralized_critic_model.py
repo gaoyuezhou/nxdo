@@ -22,12 +22,14 @@ class TorchCentralizedCriticModel(TorchModelV2, nn.Module):
                               model_config, name) ### TODO: checl this model_config
         nn.Module.__init__(self)
 
+        self.obs_dim = obs_space.shape[0] # with valid_action_mask appended
+        self.action_dim = action_space.n
+
         # Base of the model
-        self.model = get_valid_action_fcn_class(22, 7)(obs_space, action_space, num_outputs,
-                             model_config, name) ### TODO: check why the value_function of this model is called! It should not be since we want to use only the central_value_function
-                                                ### can figure this out by renaming this and never instantiate self. model
+        self.model = get_valid_action_fcn_class(self.obs_dim - self.action_dim, self.action_dim)(obs_space, action_space, num_outputs,
+                             model_config, name) 
         # Central VF maps (obs, opp_obs, opp_act) -> vf_pred
-        input_size = 29 + 29 + 7  # obs + opp_obs + opp_act
+        input_size = self.obs_dim + self.obs_dim + self.action_dim  # obs + opp_obs + opp_act
         self.central_vf = nn.Sequential(
             SlimFC(input_size, 16, activation_fn=nn.Tanh),
             SlimFC(16, 1),
@@ -36,15 +38,13 @@ class TorchCentralizedCriticModel(TorchModelV2, nn.Module):
     @override(ModelV2)
     def forward(self, input_dict, state, seq_lens):
         model_out, _ = self.model(input_dict, state, seq_lens)
-        # raise ValueError(model_out, type(self.model), input_dict, state, seq_lens)
         return model_out, []
 
     def central_value_function(self, obs, opponent_obs, opponent_actions):
         if obs.shape[0] == opponent_obs.shape[0]:
-            # print(1/0)
             input_ = torch.cat([
                 obs, opponent_obs,
-                torch.nn.functional.one_hot(opponent_actions, 7).float()
+                torch.nn.functional.one_hot(opponent_actions, self.action_dim).float()
             ], 1)
             # print("### C success!", obs.shape,  opponent_obs.shape) ## return has the same shape[0] as input
             return torch.reshape(self.central_vf(input_), [-1])
