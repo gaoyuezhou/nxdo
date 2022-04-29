@@ -16,7 +16,7 @@ from grl.rl_apps.psro.approx_exploitability_psro_logger import ApproxExploitabil
 
 
 def launch_manager(scenario: PSROScenario, psro_port: int, eval_port: int,
-                   block: bool = True, include_evals: bool = True) -> P2SROManagerWithServer:
+                   block: bool = True, include_evals: bool = True, team_game=False) -> P2SROManagerWithServer:
     if not isinstance(scenario, PSROScenario):
         raise TypeError(f"Only instances of {PSROScenario} can be used here. {scenario.name} is a {type(scenario)}.")
 
@@ -56,6 +56,7 @@ def launch_manager(scenario: PSROScenario, psro_port: int, eval_port: int,
                      block=False,
                      ray_head_address=ray_head_address,
                      eval_dispatcher_port=eval_port,
+                     team_game=team_game,
                      eval_dispatcher_host='localhost')
         print(f"Launched evals")
 
@@ -72,6 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--scenario', type=str)
     parser.add_argument('--psro_port', type=int, required=False, default=None)
     parser.add_argument('--eval_port', type=int, required=False, default=None)
+    parser.add_argument('--team_game', type=bool, required=False, default=True)
     commandline_args = parser.parse_args()
 
     scenario_name = commandline_args.scenario
@@ -85,4 +87,4 @@ if __name__ == '__main__':
     if eval_port is None:
         eval_port = establish_new_server_port_for_service(service_name=f"seed_{GRL_SEED}_{scenario.name}_evals")
 
-    launch_manager(scenario=scenario, psro_port=psro_port, eval_port=eval_port)
+    launch_manager(scenario=scenario, psro_port=psro_port, eval_port=eval_port, team_game=commandline_args.team_game)

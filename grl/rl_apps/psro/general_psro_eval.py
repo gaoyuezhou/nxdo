@@ -14,6 +14,37 @@ from grl.rl_apps.scenarios.ray_setup import init_ray_for_scenario
 from grl.rllib_tools.policy_checkpoints import load_pure_strat
 from grl.utils.port_listings import get_client_port_for_service
 
+def run_episode_team(env, policies_for_each_team) -> np.ndarray:
+    num_teams = 2
+
+    obs = env.reset()
+    dones = {}
+    game_length = 0
+    policy_states = [policies_for_each_team[i%2].get_initial_state() for i in range(4)]
+
+    payoffs_per_team_this_episode = np.zeros(shape=2, dtype=np.float64)
+    while True:
+        if "__all__" in dones:
+            if dones["__all__"]:
+                break
+        game_length += 1
+
+        action_dict = {}
+        for player in range(4):
+        # for player in range(num_players):
+            team = player % 2
+            if player in obs:
+                action_index, new_policy_state, action_info = policies_for_each_team[team].compute_single_action(
+                    obs=obs[player], state=policy_states[player])
+                policy_states[player] = new_policy_state
+                action_dict[player] = action_index
+
+        obs, rewards, dones, infos = env.step(action_dict=action_dict)
+
+        for player in range(4):
+            payoffs_per_team_this_episode[player%2] += rewards.get(player, 0.0)
+
+    return payoffs_per_team_this_episode
 
 def run_episode(env, policies_for_each_player) -> np.ndarray:
     num_players = len(policies_for_each_player)
@@ -48,7 +79,7 @@ def run_episode(env, policies_for_each_player) -> np.ndarray:
 
 
 @ray.remote(num_cpus=0, num_gpus=0)
-def run_poker_evaluation_loop(scenario_name: str, eval_dispatcher_port: int, eval_dispatcher_host: str):
+def run_poker_evaluation_loop(scenario_name: str, eval_dispatcher_port: int, eval_dispatcher_host: str, team_game=False):
     scenario: PSROScenario = scenario_catalog.get(scenario_name=scenario_name)
     if not isinstance(scenario, PSROScenario):
         raise TypeError(f"Only instances of {PSROScenario} can be used here. {scenario.name} is a {type(scenario)}.")
@@ -95,8 +126,10 @@ def run_poker_evaluation_loop(scenario_name: str, eval_dispatcher_port: int, eva
                 #           f"{policy_specs_for_each_player[1].id}: "
                 #           f"{game}/{required_games_to_play} games played, {now - time_since_last_output} seconds")
                 #     time_since_last_output = now
-
-                payoffs_per_player_this_episode = run_episode(env=env, policies_for_each_player=policies)
+                if team_game:
+                    payoffs_per_player_this_episode = run_episode_team(env=env, policies_for_each_team=policies)
+                else:
+                    payoffs_per_player_this_episode = run_episode(env=env, policies_for_each_player=policies)
                 total_payoffs_per_player += payoffs_per_player_this_episode
 
                 # if max_reward is None or max(payoffs_per_player_this_episode) > max_reward:
@@ -122,6 +155,7 @@ def launch_evals(scenario_name: str,
                  eval_dispatcher_port: int,
                  eval_dispatcher_host: str,
                  block=True,
+                 team_game=False,
                  ray_head_address=None):
 
     scenario: PSROScenario = scenario_catalog.get(scenario_name=scenario_name)
@@ -129,7 +163,7 @@ def launch_evals(scenario_name: str,
     init_ray_for_scenario(scenario=scenario, head_address=ray_head_address, logging_level=logging.INFO)
 
     num_workers = scenario.num_eval_workers
-    evaluator_refs = [run_poker_evaluation_loop.remote(scenario_name, eval_dispatcher_port, eval_dispatcher_host)
+    evaluator_refs = [run_poker_evaluation_loop.remote(scenario_name, eval_dispatcher_port, eval_dispatcher_host, team_game=team_game)
                       for _ in range(num_workers)]
     if block:
         ray.wait(evaluator_refs, num_returns=num_workers)
