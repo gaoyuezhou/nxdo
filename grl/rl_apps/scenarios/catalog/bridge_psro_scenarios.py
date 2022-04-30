@@ -42,5 +42,5 @@ scenario_catalog.add(PSROScenario(
         minimum_reward_improvement_otherwise_plateaued=0.01,
         max_train_episodes=int(1e5),
     ),
-    calc_exploitability_for_openspiel_env=True,
+    calc_exploitability_for_openspiel_env=False,
 ))

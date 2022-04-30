@@ -1,41 +1,34 @@
 import os
-
 from ray.rllib.models import MODEL_DEFAULTS
 from ray.rllib.utils import merge_dicts
-
 from grl.rllib_tools.stochastic_sampling_ignore_kwargs import StochasticSamplingIgnoreKwargs
 from grl.rllib_tools.valid_actions_epsilon_greedy import ValidActionsEpsilonGreedy
-
 # To use different params, please make define a mutation of these master parameters
 # instead of changing the constants already defined here.
-
-
 GRL_DEFAULT_OPENSPIEL_POKER_DQN_PARAMS = {
     "framework": "torch",
     # Smooth metrics over this many episodes.
-    "metrics_smoothing_episodes": 1000,
+    "metrics_smoothing_episodes": 5000,
     # === Model ===
     # Number of atoms for representing the distribution of return. When
     # this is greater than 1, distributional Q-learning is used.
     # the discrete supports are bounded by v_min and v_max
-    "num_atoms": 1,
-    "v_min": -10.0,
-    "v_max": 10.0,
+    "num_atoms": 51,
+    "v_min": -1.0,
+    "v_max": 1.0,
     # Whether to use noisy network
-    "noisy": False,
+    "noisy": True,
     # control the initial value of noisy nets
     "sigma0": 0.5,
     # Whether to use dueling dqn
-    "dueling": False,
+    "dueling": True,
     # Dense-layer setup for each the advantage branch and the value branch
     # in a dueling architecture.
     "hiddens": [256],
     # Whether to use double dqn
     "double_q": True,
-
     # N-step Q learning
-    "n_step": 1,
-
+    "n_step": 5,
     # === Exploration Settings ===
     "exploration_config": {
         # The Exploration class to use.
@@ -50,29 +43,26 @@ GRL_DEFAULT_OPENSPIEL_POKER_DQN_PARAMS = {
         "explore": False,
     },
     "explore": True,
-
     # Update the target network every `target_network_update_freq` steps.
-    "target_network_update_freq": 10000,
-
+    "target_network_update_freq": 800000,
     # === Replay buffer ===
     # Size of the replay buffer. Note that if async_updates is set, then
     # each worker will have a replay buffer of this size.
-    "buffer_size": int(2e5),
-
+    "buffer_size": int(1e6),
     # If True prioritized replay buffer will be used.
-    "prioritized_replay": False,
+    "prioritized_replay": True,
     # Alpha parameter for prioritized replay buffer.
-    "prioritized_replay_alpha": 0.0,
+    "prioritized_replay_alpha": 0.6,
     # Beta parameter for sampling from prioritized replay buffer.
-    "prioritized_replay_beta": 0.0,
+    "prioritized_replay_beta": 0.4,
     # Final value of beta (by default, we use constant beta=0.4).
-    "final_prioritized_replay_beta": 0.0,
+    "final_prioritized_replay_beta": 0.4,
     # Time steps over which the beta parameter is annealed.
     "prioritized_replay_beta_annealing_timesteps": 20000,
     # Epsilon to add to the TD errors when updating priorities.
-    "prioritized_replay_eps": 0.0,
+    "prioritized_replay_eps": 1e-6,
     # Whether to LZ4 compress observations
-    "compress_observations": False,
+    "compress_observations": True,
     # Callback to run before learning on a multi-agent batch of experiences.
     # "before_learn_on_batch": debug_before_learn_on_batch,
     # If set, this will fix the ratio of replayed from a buffer and learned on
@@ -80,7 +70,6 @@ GRL_DEFAULT_OPENSPIEL_POKER_DQN_PARAMS = {
     # timesteps. Otherwise, the replay will proceed at the native ratio
     # determined by (train_batch_size / rollout_fragment_length).
     "training_intensity": None,
-
     # === Optimization ===
     # Learning rate for adam optimizer
     "lr": 0.01,
@@ -94,14 +83,12 @@ GRL_DEFAULT_OPENSPIEL_POKER_DQN_PARAMS = {
     "learning_starts": 2000,
     # Update the replay buffer with this many samples at once. Note that
     # this setting applies per-worker if num_workers > 1.q
-    "rollout_fragment_length": 64,
+    "rollout_fragment_length": 4,
     "batch_mode": "truncate_episodes",
-
     # Size of a batch sampled from replay buffer for training. Note that
     # if async_updates is set, then each worker returns gradients for a
     # batch of this size.
     "train_batch_size": 128,
-
     # Whether to compute priorities on workers.
     "worker_side_prioritization": False,
     # Prevent iterations from going lower than this time span
@@ -109,13 +96,11 @@ GRL_DEFAULT_OPENSPIEL_POKER_DQN_PARAMS = {
     # Minimum env steps to optimize for per train call. This value does
     # not affect learning (JB: this is a lie!), only the length of train iterations.
     "timesteps_per_iteration": 0,
-
     "model": merge_dicts(MODEL_DEFAULTS, {
         "fcnet_activation": "relu",
         "fcnet_hiddens": [128],
     }),
 }
-
 GRL_DEFAULT_POKER_PPO_PARAMS = {
     "framework": "torch",
     # Should use a critic as a baseline (otherwise don't use value baseline;
@@ -178,15 +163,12 @@ GRL_DEFAULT_POKER_PPO_PARAMS = {
     # Switch on Trajectory View API for PPO by default.
     # NOTE: Only supported for PyTorch so far.
     "_use_trajectory_view_api": True,
-
     # Prevent iterations from going lower than this time span
     "min_iter_time_s": 0,
     # Minimum env steps to optimize for per train call. This value does
     # not affect learning (JB: this is a lie!), only the length of train iterations.
     "timesteps_per_iteration": 0,
-
     "num_envs_per_worker": 1,
-
     "exploration_config": {
         # The Exploration class to use. In the simplest case, this is the name
         # (str) of any class present in the `rllib.utils.exploration` package.
@@ -196,16 +178,13 @@ GRL_DEFAULT_POKER_PPO_PARAMS = {
         "type": StochasticSamplingIgnoreKwargs,
         # Add constructor kwargs here (if any).
     },
-
     "model": merge_dicts(MODEL_DEFAULTS, {
         "fcnet_activation": "relu",
         "fcnet_hiddens": [128],
         "custom_model": None,
     }),
 }
-
 GRL_DEFAULT_OSHI_ZUMO_MEDIUM_DQN_PARAMS = {
-
     "adam_epsilon": 0.01,
     "batch_mode": "truncate_episodes",
     "buffer_size": 50000,
@@ -234,7 +213,6 @@ GRL_DEFAULT_OSHI_ZUMO_MEDIUM_DQN_PARAMS = {
     "lr_schedule": None,
     "metrics_smoothing_episodes": 5000,
     "min_iter_time_s": 0,
-
     "n_step": 1,
     "noisy": False,
     "num_atoms": 1,
@@ -255,9 +233,7 @@ GRL_DEFAULT_OSHI_ZUMO_MEDIUM_DQN_PARAMS = {
     "training_intensity": None,
     "v_max": 10.0,
 }
-
 GRL_DEFAULT_OSHI_ZUMO_TINY_DQN_PARAMS = {
-
     "adam_epsilon": 0.0001,
     "batch_mode": "truncate_episodes",
     "buffer_size": 200000,
@@ -286,7 +262,6 @@ GRL_DEFAULT_OSHI_ZUMO_TINY_DQN_PARAMS = {
     "lr_schedule": None,
     "metrics_smoothing_episodes": 5000,
     "min_iter_time_s": 0,
-
     "n_step": 1,
     "noisy": False,
     "num_atoms": 1,
@@ -307,3 +282,15 @@ GRL_DEFAULT_OSHI_ZUMO_TINY_DQN_PARAMS = {
     "training_intensity": None,
     "v_max": 10.0,
 }
+
+
+
+
+
+
+
+
+
+
+
+
