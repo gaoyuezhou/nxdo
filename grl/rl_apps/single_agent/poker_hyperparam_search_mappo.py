@@ -34,12 +34,21 @@ from grl.rllib_tools.models.valid_actions_fcnet import get_valid_action_fcn_clas
 from grl.rl_apps.tiny_bridge_2p_mappo import CCTrainer
 from gym.spaces import Discrete
 
+import argparse
+
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--game', type=str)
+
+    args = parser.parse_args()
+
     # game_version = 'kuhn_poker'
     # game_version = 'leduc_poker'
-    game_version = 'goofspiel'
+    # game_version = 'goofspiel'
+    game_version = args.game
 
     experiment_name = f"{game_version}_hyperparam_search_mappo"
     num_cpus = 60
@@ -136,7 +145,7 @@ if __name__ == "__main__":
 
         "vf_share_layers": False,
         "num_gpus": float(os.getenv("WORKER_GPU_NUM", 0.0)),
-        "num_workers": 1,
+        "num_workers": 4,
         "num_gpus_per_worker": float(os.getenv("WORKER_GPU_NUM", 0.0)),
         "num_envs_per_worker": 1,
         "metrics_smoothing_episodes": 5000,
@@ -205,7 +214,7 @@ if __name__ == "__main__":
              metric="br_reward_mean",
 
              config=hyperparams,
-             num_samples=1, #### is 2 for ppo in oshi_zumo
+             num_samples=20, #### is 2 for ppo in oshi_zumo
              search_alg=search, #### can be None?
              mode="max",
              local_dir=data_dir(),
