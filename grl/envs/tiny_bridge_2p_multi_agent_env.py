@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
 }
 
 OBS_SHAPES = {
-    TINY_BRIDGE_2p: (29,), ####
+    TINY_BRIDGE_2p: (22 + 7,), ####
 }
 
 VALID_ACTIONS_SHAPES = {
@@ -139,7 +139,6 @@ class TinyBridge2pMultiAgentEnv(ValidActionsMultiAgentEnv):
         return self._get_current_obs()
 
     def step(self, action_dict):
-        # import pdb; pdb.set_trace()
         """Returns observations from ready agents.
 
         The returns are dicts mapping from agent_id strings to values. The

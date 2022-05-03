@@ -17,10 +17,10 @@ def with_base_config(base_config, extra_config):
 
 
 # game versions
-TINY_BRIDGE_4P = "tiny_bridge_4p"
+GOOFSPIEL = "goofspiel" ## Note: this is a synchronous game! 
 
 DEFAULT_CONFIG = {
-    'version': TINY_BRIDGE_4P, ####
+    'version': GOOFSPIEL, ####
     'fixed_players': True,
     'continuous_action_space': False,
     'dummy_action_multiplier': 1,
@@ -29,21 +29,20 @@ DEFAULT_CONFIG = {
 }
 
 OBS_SHAPES = {
-    TINY_BRIDGE_4P: (84 + 9,), ####
+    GOOFSPIEL: (589 + 13,), ####
 }
 
 VALID_ACTIONS_SHAPES = {
-    TINY_BRIDGE_4P: (9,), ####
+    GOOFSPIEL: (13,), ####
 }
 
-TINY_BRIDGE_4P_ENV = 'tiny_bridge_4p_env' ####
+GOOFSPIEL_4P_ENV = 'GOOFSPIEL_4p_env' ####
 
 PARTIAL_OBSERVATION = 'partial_observation'
 VALID_ACTIONS_MASK = 'valid_actions_mask'
 
 
-
-class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
+class Goofspiel4pMultiAgentEnv(ValidActionsMultiAgentEnv): # Note: this is a team game env! Team0: player0 + player 2; Team1: player1 + player3
 
     def __init__(self, env_config=None):
         env_config = with_base_config(base_config=DEFAULT_CONFIG, extra_config=env_config if env_config else {})
@@ -64,7 +63,10 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         self._append_valid_actions_mask_to_obs = env_config["append_valid_actions_mask_to_obs"]
         self._is_universal_poker = False
         self._stack_size = None
-        self.open_spiel_env_config = {}
+
+        self.open_spiel_env_config = {
+            "players": 4
+        }
 
         self.openspiel_env = Environment(game=self.game_version, discount=1.0,
                                          **self.open_spiel_env_config)
@@ -127,10 +129,15 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         Returns:
             obs (dict): New observations for each ready agent.
         """
-        self.curr_time_step = self.openspiel_env.reset()
+        self.curr_time_step = self.openspiel_env.reset() # observations: 
+                                                         # 'info_state', [589] * 4
+                                                         # 'legal_actions', 4 arrays of legal actions, not mask
+                                                         # 'current_player', not meaningful
+                                                         # 'serialized_state'
+                                                         # rewards, discounts
 
         if self._fixed_players:
-            self.player_map = lambda p: p
+            self.player_map = lambda p: p # env player_id --> policy player_id
         else:
             # TODO: double check
             # randomly change seating but keep same partner
@@ -141,8 +148,9 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
 
         return self._get_current_obs()
 
-    def step(self, action_dict):
+    def step(self, action_dict): # 
         # import pdb; pdb.set_trace()
+        # Note: assume action_dict always contain actions for all players
         """Returns observations from ready agents.
 
         The returns are dicts mapping from agent_id strings to values. The
@@ -157,40 +165,36 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
                 "__all__" (required) is used to indicate env termination.
             infos (dict): Optional info values for each agent id.
         """
-        curr_player_id = self.curr_time_step.observations["current_player"]
-        legal_actions = self.curr_time_step.observations["legal_actions"][curr_player_id]
-        player_action = action_dict[self.player_map(curr_player_id)]
-        orig_player_action = player_action
+        player_actions = []
+        for curr_player_id in range(4): # env player_id
+            legal_actions = self.curr_time_step.observations["legal_actions"][curr_player_id]
+            player_action = action_dict[self.player_map(curr_player_id)]
+            orig_player_action = player_action
 
-        print("@@@@@@@@@@@@@@@@@@@ curr_player_id: ", curr_player_id)
+            if self.dummy_action_multiplier != 1:
+                # extended dummy action space is just the base discrete actions repeated multiple times
+                # convert to the base discrete action space.
+                player_action = player_action % self.base_num_discrete_actions
 
-        # if self._continuous_action_space or \
-        #         (self._individual_players_with_continuous_action_space and curr_player_id in self._individual_players_with_continuous_action_space):
-        #     player_action = parse_discrete_poker_action_from_continuous_space(
-        #         continuous_action=player_action, legal_actions_list=legal_actions,
-        #         total_num_discrete_actions_including_dummy=self.num_discrete_actions)
+            if player_action not in self._base_action_space:
+                raise ValueError("Processed player action isn't in the base action space.\n"
+                                f"orig action: {orig_player_action}\n"
+                                f"processed action: {player_action}\n"
+                                f"action space: {self.action_space}\n"
+                                f"base action space: {self._base_action_space}")
 
-        if self.dummy_action_multiplier != 1:
-            # extended dummy action space is just the base discrete actions repeated multiple times
-            # convert to the base discrete action space.
-            player_action = player_action % self.base_num_discrete_actions
+            if player_action not in legal_actions:
+                legal_actions_mask = np.zeros(self.openspiel_env.action_spec()["num_actions"])
+                legal_actions_mask[legal_actions] = 1.0
+                raise ValueError(curr_player_id, f"illegal actions are not allowed.\n"
+                                f"Action was {player_action}.\n"
+                                f"Legal actions are {legal_actions}\n"
+                                f"Legal actions vector is {legal_actions_mask}")
+            player_actions.append(player_action)
 
-        if player_action not in self._base_action_space:
-            raise ValueError("Processed player action isn't in the base action space.\n"
-                             f"orig action: {orig_player_action}\n"
-                             f"processed action: {player_action}\n"
-                             f"action space: {self.action_space}\n"
-                             f"base action space: {self._base_action_space}")
-
-        if player_action not in legal_actions:
-            legal_actions_mask = np.zeros(self.openspiel_env.action_spec()["num_actions"])
-            legal_actions_mask[legal_actions] = 1.0
-            raise ValueError(curr_player_id, f"illegal actions are not allowed.\n"
-                             f"Action was {player_action}.\n"
-                             f"Legal actions are {legal_actions}\n"
-                             f"Legal actions vector is {legal_actions_mask}")
         try:
-            self.curr_time_step = self.openspiel_env.step([player_action])
+            print("### player_actions: ", player_actions)
+            self.curr_time_step = self.openspiel_env.step(player_actions)
         except SpielError:
             # if not self._is_universal_poker:
             raise
@@ -201,23 +205,29 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
             #                                discounts=self.curr_time_step.discounts,
             #                                step_type=StepType.LAST)
 
-        new_curr_player_id = self.curr_time_step.observations["current_player"]
+        # new_curr_player_id = self.curr_time_step.observations["current_player"]
         obs = self._get_current_obs()
         done = self.curr_time_step.last()
 
-        # if done:
-        #     dones = {0: done, 1:done, "__all__": done}
-        # else:
-        #     dones = {self.player_map(new_curr_player_id): done, "__all__": done}
-        dones = {self.player_map(new_curr_player_id): done, "__all__": done}
+        dones = {"__all__": done} # TODO: all done or all not done. sanity check if this will error out
 
         # if done:
         if True: ### always return rewards and infos for both players
-            rewards = {self.player_map(i): self.curr_time_step.rewards[i] for i in range(4)}
+            team0_reward = self.curr_time_step.rewards[0] + self.curr_time_step.rewards[2]
+            team1_reward = self.curr_time_step.rewards[1] + self.curr_time_step.rewards[3]
+            team_rewards = [team0_reward, team1_reward, team0_reward, team1_reward]
 
+            rewards = {self.player_map(i): team_rewards[i] for i in range(4)}
             # assert self.curr_time_step.rewards[0] == -self.curr_time_step.rewards[1] # should not be the case since it's coorperative
-
             infos = {i: {} for i in range(4)}
+
+            for i in range(4):
+                infos[self.player_map(i)]['game_result_was_invalid'] = False
+                infos[self.player_map(i)]['rewards'] = team_rewards[i]
+
+            assert sum(
+                team_rewards) < 1e-5, "curr_time_step rewards in are terminal state are {} (they should sum to zero), but they sum to {}".format(
+                team_rewards, sum(team_rewards))
 
             if self.curr_time_step.rewards[0] > 0:
                 infos[self.player_map(0)]['game_result'] = 'won'
@@ -234,10 +244,6 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
                 infos[self.player_map(1)]['game_result'] = 'tied'
                 infos[self.player_map(2)]['game_result'] = 'tied'
                 infos[self.player_map(3)]['game_result'] = 'tied'
-
-            for i in range(4):
-                infos[self.player_map(i)]['game_result_was_invalid'] = False
-                infos[self.player_map(i)]['rewards'] = self.curr_time_step.rewards[i]
 
         else:
             assert self.curr_time_step.rewards[
@@ -259,4 +265,4 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
 
 
 
-register_env(TINY_BRIDGE_4P_ENV, lambda env_config: TinyBridge4pMultiAgentEnv(env_config)) ####
+register_env(GOOFSPIEL_4P_ENV, lambda env_config: Goofspiel4pMultiAgentEnv(env_config)) ####

@@ -17,33 +17,53 @@ def with_base_config(base_config, extra_config):
 
 
 # game versions
-TINY_BRIDGE_4P = "tiny_bridge_4p"
+KUHN_POKER = 'kuhn_poker'
+LEDUC_POKER = 'leduc_poker'
 
 DEFAULT_CONFIG = {
-    'version': TINY_BRIDGE_4P, ####
+    'version': KUHN_POKER,
     'fixed_players': True,
-    'continuous_action_space': False,
     'dummy_action_multiplier': 1,
+    'continuous_action_space': False,
     'penalty_for_invalid_actions': False,
     'append_valid_actions_mask_to_obs': True,
 }
 
 OBS_SHAPES = {
-    TINY_BRIDGE_4P: (84 + 9,), ####
+    KUHN_POKER: (23 + 2,),
+    LEDUC_POKER: (64 + 3,),
 }
 
 VALID_ACTIONS_SHAPES = {
-    TINY_BRIDGE_4P: (9,), ####
+    KUHN_POKER: (2,),
+    LEDUC_POKER: (3,),
 }
 
-TINY_BRIDGE_4P_ENV = 'tiny_bridge_4p_env' ####
+POKER_4p_ENV = 'poker_4p_env'
 
 PARTIAL_OBSERVATION = 'partial_observation'
 VALID_ACTIONS_MASK = 'valid_actions_mask'
 
 
+def parse_discrete_poker_action_from_continuous_space(continuous_action, legal_actions_list,
+                                                      total_num_discrete_actions_including_dummy):
+    assert isinstance(continuous_action, (float, np.floating)) or \
+           isinstance(continuous_action, np.ndarray) and isinstance(continuous_action[0], np.floating), \
+        f"action {continuous_action} is a {type(continuous_action)}. " \
+        f"If the action is an int, something is likely wrong with the continuous policy output."
 
-class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
+    # player action is between -1 and 1, normalize to 0 and 1 and then quantize to a discrete action
+    player_action = (np.clip(continuous_action, a_min=-1.0, a_max=1.0) + 1.0) / 2.0
+    assert 0.0 - 1e-9 <= player_action <= 1.0 + 1e-9, f"action was: {player_action} before normalization: {continuous_action}"
+    # place discrete actions in [0, 1] and find closest corresponding discrete action to player action
+    nearest_legal_discrete_action = min(legal_actions_list,
+                                        key=lambda x: abs(
+                                            x / (total_num_discrete_actions_including_dummy - 1) - player_action))
+    # player action is now a discrete action
+    return nearest_legal_discrete_action
+
+
+class Poker4pMultiAgentEnv(ValidActionsMultiAgentEnv): # Note: this is a team game env! Team0: player0 + player 2; Team1: player1 + player3
 
     def __init__(self, env_config=None):
         env_config = with_base_config(base_config=DEFAULT_CONFIG, extra_config=env_config if env_config else {})
@@ -62,9 +82,11 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         self._invalid_action_penalties = [False, False]
 
         self._append_valid_actions_mask_to_obs = env_config["append_valid_actions_mask_to_obs"]
-        self._is_universal_poker = False
         self._stack_size = None
-        self.open_spiel_env_config = {}
+
+        self.open_spiel_env_config = {
+                "players": 4
+            }
 
         self.openspiel_env = Environment(game=self.game_version, discount=1.0,
                                          **self.open_spiel_env_config)
@@ -96,9 +118,8 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         obs = {}
         player_ids = [0, 1, 2, 3]
 
-        ##### commented out since we want to always return the observations for both players #####
         # if done:
-        #     player_ids = [0, 1]
+        #     player_ids = [0, 1, 2, 3]
         # else:
         #     curr_player_id = self.curr_time_step.observations["current_player"]
         #     player_ids = [curr_player_id]
@@ -119,7 +140,7 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
             else:
                 obs[self.player_map(player_id)] = np.asarray(info_state, dtype=np.float32)
 
-        return obs # infostate or infostate + legal_action_mask
+        return obs
 
     def reset(self):
         """Resets the env and returns observations from ready agents.
@@ -132,17 +153,15 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         if self._fixed_players:
             self.player_map = lambda p: p
         else:
-            # TODO: double check
-            # randomly change seating but keep same partner
+            # swap player mapping in half of the games
             self.player_map = random.choice((lambda p: p,
                                              lambda p: (p + 1) % 4,
                                              lambda p: (p + 2) % 4,
-                                             lambda p: (p + 3) % 4))
+                                             lambda p: (p + 3) % 4)) # TODO: double check
 
         return self._get_current_obs()
 
     def step(self, action_dict):
-        # import pdb; pdb.set_trace()
         """Returns observations from ready agents.
 
         The returns are dicts mapping from agent_id strings to values. The
@@ -159,16 +178,15 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         """
         curr_player_id = self.curr_time_step.observations["current_player"]
         legal_actions = self.curr_time_step.observations["legal_actions"][curr_player_id]
+
         player_action = action_dict[self.player_map(curr_player_id)]
         orig_player_action = player_action
 
-        print("@@@@@@@@@@@@@@@@@@@ curr_player_id: ", curr_player_id)
-
-        # if self._continuous_action_space or \
-        #         (self._individual_players_with_continuous_action_space and curr_player_id in self._individual_players_with_continuous_action_space):
-        #     player_action = parse_discrete_poker_action_from_continuous_space(
-        #         continuous_action=player_action, legal_actions_list=legal_actions,
-        #         total_num_discrete_actions_including_dummy=self.num_discrete_actions)
+        if self._continuous_action_space or \
+                (self._individual_players_with_continuous_action_space and curr_player_id in self._individual_players_with_continuous_action_space):
+            player_action = parse_discrete_poker_action_from_continuous_space(
+                continuous_action=player_action, legal_actions_list=legal_actions,
+                total_num_discrete_actions_including_dummy=self.num_discrete_actions)
 
         if self.dummy_action_multiplier != 1:
             # extended dummy action space is just the base discrete actions repeated multiple times
@@ -185,46 +203,45 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         if player_action not in legal_actions:
             legal_actions_mask = np.zeros(self.openspiel_env.action_spec()["num_actions"])
             legal_actions_mask[legal_actions] = 1.0
-            raise ValueError(curr_player_id, f"illegal actions are not allowed.\n"
+            raise ValueError(f"illegal actions are not allowed.\n"
                              f"Action was {player_action}.\n"
                              f"Legal actions are {legal_actions}\n"
                              f"Legal actions vector is {legal_actions_mask}")
         try:
             self.curr_time_step = self.openspiel_env.step([player_action])
         except SpielError:
-            # if not self._is_universal_poker:
             raise
-            # Enforce a time limit on universal poker if the infostate size becomes larger
-            # than the observation array size and throws an error.
-            # self.curr_time_step = TimeStep(observations=self.curr_time_step.observations,
-            #                                rewards=np.zeros_like(self.curr_time_step.rewards),
-            #                                discounts=self.curr_time_step.discounts,
-            #                                step_type=StepType.LAST)
 
         new_curr_player_id = self.curr_time_step.observations["current_player"]
         obs = self._get_current_obs()
         done = self.curr_time_step.last()
 
-        # if done:
-        #     dones = {0: done, 1:done, "__all__": done}
-        # else:
-        #     dones = {self.player_map(new_curr_player_id): done, "__all__": done}
         dones = {self.player_map(new_curr_player_id): done, "__all__": done}
 
-        # if done:
-        if True: ### always return rewards and infos for both players
-            rewards = {self.player_map(i): self.curr_time_step.rewards[i] for i in range(4)}
+        if True:
+            #### TODO: need to sum the reward and assert zero-sum between teams
+            team0_reward = self.curr_time_step.rewards[0] + self.curr_time_step.rewards[2]
+            team1_reward = self.curr_time_step.rewards[1] + self.curr_time_step.rewards[3]
+            team_rewards = [team0_reward, team1_reward, team0_reward, team1_reward]
 
-            # assert self.curr_time_step.rewards[0] == -self.curr_time_step.rewards[1] # should not be the case since it's coorperative
-
+            rewards = {self.player_map(i): team_rewards[i] for i in range(4)}
+            # assert self.curr_time_step.rewards[0] == -self.curr_time_step.rewards[1]
             infos = {i: {} for i in range(4)}
 
-            if self.curr_time_step.rewards[0] > 0:
+            for i in range(4):
+                infos[self.player_map(i)]['game_result_was_invalid'] = False
+                infos[self.player_map(i)]['rewards'] = team_rewards[i]
+
+            assert sum(
+                team_rewards) == 0.0, "curr_time_step rewards in are terminal state are {} (they should sum to zero)".format(
+                self.curr_time_step.rewards)
+
+            if team_rewards[0] > 0:
                 infos[self.player_map(0)]['game_result'] = 'won'
                 infos[self.player_map(1)]['game_result'] = 'lost'
                 infos[self.player_map(2)]['game_result'] = 'won'
                 infos[self.player_map(3)]['game_result'] = 'lost'
-            elif self.curr_time_step.rewards[1] > 0:
+            elif team_rewards[1] > 0:
                 infos[self.player_map(1)]['game_result'] = 'won'
                 infos[self.player_map(0)]['game_result'] = 'lost'
                 infos[self.player_map(3)]['game_result'] = 'won'
@@ -235,10 +252,6 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
                 infos[self.player_map(2)]['game_result'] = 'tied'
                 infos[self.player_map(3)]['game_result'] = 'tied'
 
-            for i in range(4):
-                infos[self.player_map(i)]['game_result_was_invalid'] = False
-                infos[self.player_map(i)]['rewards'] = self.curr_time_step.rewards[i]
-
         else:
             assert self.curr_time_step.rewards[
                        new_curr_player_id] == 0, "curr_time_step rewards in non terminal state are {}".format(
@@ -248,7 +261,8 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
             rewards = {self.player_map(new_curr_player_id): self.curr_time_step.rewards[new_curr_player_id]}
             assert self.curr_time_step.rewards[1 - new_curr_player_id] == 0.0
             infos = {}
-        if self._apply_penalty_for_invalid_actions: # False
+
+        if self._apply_penalty_for_invalid_actions:
             for player_id, penalty in enumerate(self._invalid_action_penalties):
                 if penalty and self.player_map(player_id) in rewards:
                     rewards[self.player_map(player_id)] -= 4.0
@@ -257,6 +271,4 @@ class TinyBridge4pMultiAgentEnv(ValidActionsMultiAgentEnv):
         return obs, rewards, dones, infos
 
 
-
-
-register_env(TINY_BRIDGE_4P_ENV, lambda env_config: TinyBridge4pMultiAgentEnv(env_config)) ####
+register_env(POKER_4p_ENV, lambda env_config: Poker4pMultiAgentEnv(env_config))
