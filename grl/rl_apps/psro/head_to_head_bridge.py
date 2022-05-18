@@ -36,6 +36,7 @@ import re
 import traceback 
 import sys
 import pyspiel
+from itertools import product
 
 from grl.rl_apps.psro.general_psro_eval import run_episode_team
 from grl.rl_apps.scenarios.catalog import scenario_catalog
@@ -60,6 +61,9 @@ from grl.algos.p2sro.payoff_table import PayoffTable
 from grl.algos.p2sro.p2sro_manager.utils import get_latest_metanash_strategies, PolicySpecDistribution
 from grl.rllib_tools.models.valid_actions_fcnet import get_valid_action_fcn_class_for_env
 from grl.rl_apps.centralized_critic_model import TorchCentralizedCriticModel
+
+import pickle
+import matplotlib.pyplot as plt
 
 
 def load_metanash_pure_strat(policy: Policy, pure_strat_spec: StrategySpec):
@@ -216,14 +220,31 @@ def get_all_sp_specs(sp_iter, sp_seed_path):
 
 
 if __name__ == "__main__":
-    from itertools import product
-    scenario_name = 'tiny_bridge_4p_psro'
-    psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
-    sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
-    # scenario_name = 'bridge_psro'
-    # psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
-    # sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
-    num_games = 10
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", "--scenario_name", type=str, required=True)
+    parser.add_argument("-r", "--random_policy", action="store_true")
+    parser.add_argument("-n", "--num_games", type=int, default=5)
+    args = parser.parse_args()
+
+
+    scenario_name = args.scenario_name
+    num_games = args.num_games
+    if scenario_name == 'tiny_bridge_4p_psro':
+        psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
+        sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
+    elif scenario_name == 'bridge_psro':
+        psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
+        sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
+    else:
+        raise NotImplementedError
+
+    output_dir = f'./head_to_head_{scenario_name}_n{num_games}'
+    if args.random_policy:
+        output_dir += '_rand' 
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
     odd_ckpts = list(np.array(range(0, 300, 2))+1) # Note: should > number of ckpts we have!
     sp_iters = [500 * i for i in range(1000)] # Note: should > number of iters we have!
     sp_iters[0] += 1 # the first checkpoint is 1 instead of 0
@@ -241,7 +262,6 @@ if __name__ == "__main__":
         for ckpt in odd_ckpts:
             payoff_table_json_path = os.path.join(psro_seed_path, "payoff_table_checkpoints", f"payoff_table_checkpoint_{ckpt}.json")
             if os.path.isfile(payoff_table_json_path):
-                print(ckpt)
                 payoff_table = PayoffTable.from_json_file(payoff_table_json_path)
                 cur_timesteps = sum(spec.metadata["timesteps_training_br"] for spec in payoff_table.get_ordered_spec_list_for_player(0))
                 cur_timesteps += sum(spec.metadata["timesteps_training_br"] for spec in payoff_table.get_ordered_spec_list_for_player(1))
@@ -254,24 +274,23 @@ if __name__ == "__main__":
             if os.path.isfile(br_iter_json_path):
                 sp_spec = StrategySpec.from_json_file(br_iter_json_path)
                 sp_iter2timestep[sp_seed_path][sp_iter] = sp_spec.metadata['timesteps_training'] 
-    
+
     results = [] # should be len(psro_seeds_paths) * len(sp_seeds_paths)
+    r = 0
     for psro_seed_path, sp_seed_path in product(psro_seeds_paths, sp_seeds_paths):
         ckpt_mapping = find_timestep_mapping(psro_seed_path, sp_seed_path)
-        # print(ckpt_mapping)
+        print(f"@@@@@@@@@@@ max ckpt: {sorted(ckpt_mapping.keys())[-1]}")
         # import pdb; pdb.set_trace()
         ckpt_results = [] # len == num checkpoints to eval
         for ckpt, sp_iter in ckpt_mapping.items():
             print("######### running ckpt ", ckpt)
             psro_specs_with_prob = get_all_psro_specs_with_prob(ckpt, psro_seed_path)
             sp_specs = get_all_sp_specs(sp_iter, sp_seed_path)
-            policy_combo_results = [] # ith entry is the ith psro spec vs. sp spec, length = # specs in psro payoff_table
+            player_combo_results = []  # len == 2
             cnt=0
-            for psro_spec_with_prob, sp_spec in product(psro_specs_with_prob, sp_specs): # loop x * 1 times
-                print(f"----------------{cnt} new spec---------------")
-                player_combo_results = []  # len == 2
-                cnt+=1
-                for psro_team, sp_team in [[0, 1], [1, 0]]:
+            for psro_team, sp_team in [[0, 1], [1, 0]]:
+                policy_combo_results = [] # ith entry is the ith psro spec vs. sp spec, length = # specs in psro payoff_table
+                for psro_spec_with_prob, sp_spec in product(psro_specs_with_prob, sp_specs): # loop x * 1 times
                     weighted_psro_rewards = [] # len == num_games
                     for i in range(num_games):
                         scenario: PSROScenario = scenario_catalog.get(scenario_name=scenario_name)
@@ -279,32 +298,46 @@ if __name__ == "__main__":
 
                         policies_for_each_player = [get_policy(scenario, env), get_policy(scenario, env)]
                         load_metanash_pure_strat(policies_for_each_player[psro_team], pure_strat_spec=psro_spec_with_prob['specs'][psro_team])
-                        load_metanash_pure_strat(policies_for_each_player[sp_team], pure_strat_spec=sp_spec['specs'][sp_team])
+                        if not args.random_policy:
+                            load_metanash_pure_strat(policies_for_each_player[sp_team], pure_strat_spec=sp_spec['specs'][sp_team])
 
                         payoffs_per_team_this_episode = run_episode_team(env,  [policies_for_each_player[0], \
                                                                                 policies_for_each_player[1], \
                                                                                 policies_for_each_player[0], \
                                                                                 policies_for_each_player[1]])
                         # print(f"PSRO rew:  {payoffs_per_team_this_episode[psro_team]},    Weight:  {psro_spec_with_prob['weights'][psro_team]}")
-                        weighted_psro_rewards.append(payoffs_per_team_this_episode[psro_team])
-                    print(f"PSRO avg rew:  {np.mean(weighted_psro_rewards)},    Weight:  {psro_spec_with_prob['weights'][psro_team]}")
-                    weighted_psro_rewards = [i * psro_spec_with_prob['weights'][psro_team] for i in weighted_psro_rewards]
-                    player_combo_results.append(np.mean(weighted_psro_rewards))
-                policy_combo_results.append(np.mean(player_combo_results))
-            ckpt_results.append(np.mean(policy_combo_results))
+                        weighted_psro_rewards.append(payoffs_per_team_this_episode[psro_team] * psro_spec_with_prob['weights'][psro_team])
+                        # weighted_psro_rewards.append(1 * psro_spec_with_prob['weights'][psro_team])
+                    # print(f"PSRO avg rew:  {np.mean(weighted_psro_rewards)},    Weight:  {psro_spec_with_prob['weights'][psro_team]}")
+                    assert len(weighted_psro_rewards) == num_games
+                    policy_combo_results.append(np.mean(weighted_psro_rewards))
+                # import pdb; pdb.set_trace()
+                assert len(policy_combo_results) == len(psro_specs_with_prob)
+                player_combo_results.append(np.sum(policy_combo_results))
+            assert len(player_combo_results) == 2
+            ckpt_results.append(np.mean(player_combo_results))
+        assert len(ckpt_results) == len(ckpt_mapping)
+        plt.cla()
+        plt.plot(ckpt_results, label=f'combo {r}')
+        plt.axhline(y=0, color='r', linestyle='-')
+        plt.legend(loc='lower right')
+        plt.savefig(os.path.join(output_dir, f'{scenario_name}_combo{r}_num_games_{num_games}'))
         results.append(ckpt_results)
+        r += 1
         #             player_combo_results.append(weighted_psro_rewards)
         #         policy_combo_results.append(player_combo_results)
         #     ckpt_results.append(policy_combo_results)
         # results.append(ckpt_results)
-    import pdb; pdb.set_trace()
-    import matplotlib.pyplot as plt
-    for r in range(len(results)):
-        plt.plot(results[r], label=f'combo {r}')
-        plt.axhline(y=0, color='r', linestyle='-')
-        # plt.ylim([-5000, 1000])
-        plt.legend(loc='lower right')
-        plt.savefig(f'combo {r}')
+    with open(os.path.join(output_dir, f'{scenario_name}_head_to_head.pkl'), 'wb') as fp:
+        pickle.dump(results, fp)
+    # import pdb; pdb.set_trace()
+    
+    # for r in range(len(results)):
+    #     plt.plot(results[r], label=f'combo {r}')
+    #     plt.axhline(y=0, color='r', linestyle='-')
+    #     # plt.ylim([-5000, 1000])
+    #     plt.legend(loc='lower right')
+    #     plt.savefig(f'combo {r}')
         
     import pdb; pdb.set_trace()
 
