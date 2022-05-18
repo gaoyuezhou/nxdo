@@ -188,6 +188,7 @@ def find_timestep_mapping(psro_path, sp_path):
         for sp_itr, sp_ts in sp_mapping.items():
             if sp_ts >= psro_ts:
                 mapping[psro_itr] = sp_itr
+                break
     mapping = {k: v for k, v in mapping.items() if v is not None} # only return mapped ckpts
     return mapping
 
@@ -216,15 +217,15 @@ def get_all_sp_specs(sp_iter, sp_seed_path):
 
 if __name__ == "__main__":
     from itertools import product
-    # scenario_name = 'tiny_bridge_4p_psro'
-    # psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
-    # sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
-    scenario_name = 'bridge_psro'
-    psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
-    sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
+    scenario_name = 'tiny_bridge_4p_psro'
+    psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
+    sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
+    # scenario_name = 'bridge_psro'
+    # psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
+    # sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
     num_games = 10
-    odd_ckpts = list(np.array(range(0, 100, 2))+1)
-    sp_iters = [500 * i for i in range(10)]
+    odd_ckpts = list(np.array(range(0, 300, 2))+1) # Note: should > number of ckpts we have!
+    sp_iters = [500 * i for i in range(1000)] # Note: should > number of iters we have!
     sp_iters[0] += 1 # the first checkpoint is 1 instead of 0
     psro_seeds_paths = []
     sp_seeds_paths = []
@@ -240,6 +241,7 @@ if __name__ == "__main__":
         for ckpt in odd_ckpts:
             payoff_table_json_path = os.path.join(psro_seed_path, "payoff_table_checkpoints", f"payoff_table_checkpoint_{ckpt}.json")
             if os.path.isfile(payoff_table_json_path):
+                print(ckpt)
                 payoff_table = PayoffTable.from_json_file(payoff_table_json_path)
                 cur_timesteps = sum(spec.metadata["timesteps_training_br"] for spec in payoff_table.get_ordered_spec_list_for_player(0))
                 cur_timesteps += sum(spec.metadata["timesteps_training_br"] for spec in payoff_table.get_ordered_spec_list_for_player(1))
@@ -252,10 +254,12 @@ if __name__ == "__main__":
             if os.path.isfile(br_iter_json_path):
                 sp_spec = StrategySpec.from_json_file(br_iter_json_path)
                 sp_iter2timestep[sp_seed_path][sp_iter] = sp_spec.metadata['timesteps_training'] 
-
+    
     results = [] # should be len(psro_seeds_paths) * len(sp_seeds_paths)
     for psro_seed_path, sp_seed_path in product(psro_seeds_paths, sp_seeds_paths):
         ckpt_mapping = find_timestep_mapping(psro_seed_path, sp_seed_path)
+        # print(ckpt_mapping)
+        # import pdb; pdb.set_trace()
         ckpt_results = [] # len == num checkpoints to eval
         for ckpt, sp_iter in ckpt_mapping.items():
             print("######### running ckpt ", ckpt)
@@ -293,6 +297,15 @@ if __name__ == "__main__":
         #         policy_combo_results.append(player_combo_results)
         #     ckpt_results.append(policy_combo_results)
         # results.append(ckpt_results)
+    import pdb; pdb.set_trace()
+    import matplotlib.pyplot as plt
+    for r in range(len(results)):
+        plt.plot(results[r], label=f'combo {r}')
+        plt.axhline(y=0, color='r', linestyle='-')
+        # plt.ylim([-5000, 1000])
+        plt.legend(loc='lower right')
+        plt.savefig(f'combo {r}')
+        
     import pdb; pdb.set_trace()
 
 
