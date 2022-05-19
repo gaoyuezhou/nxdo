@@ -323,8 +323,8 @@ if __name__ == "__main__":
         results.append(seed_results)
         r += 1
 
-        with open(os.path.join(output_dir, 'results.pkl'), 'wb') as fp:
-            pickle.dump(results, fp)
+    with open(os.path.join(output_dir, 'results.pkl'), 'wb') as fp:
+        pickle.dump(results, fp)
     
     flat_results = []
     for row in results:
