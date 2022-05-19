@@ -312,10 +312,10 @@ if __name__ == "__main__":
             print(np.mean(psro_rewards))
             seed_results.extend(psro_rewards) # preserve the full result
         assert len(seed_results) == 2 * num_games
-        with open(os.path.join(output_dir, f'combo{r}_data.txt'), 'w') as text_file:
-            np.savetxt(text_file, seed_results)
-        # with open(os.path.join(output_dir, f'combo{r}_data.pkl'), 'wb') as fp:
-        #     pickle.dump(seed_results, fp)
+        # with open(os.path.join(output_dir, f'combo{r}_data.txt'), 'w') as text_file:
+        #     np.savetxt(text_file, seed_results)
+        with open(os.path.join(output_dir, f'combo{r}_data.pkl'), 'wb') as fp:
+            pickle.dump(seed_results, fp)
         with open(os.path.join(output_dir, f'combo{r}_timestep_info.pkl'), 'wb') as fp:
             pickle.dump(ts_info, fp)
         with open(os.path.join(output_dir, f'combo{r}_seed_info.txt'), 'w') as text_file:
@@ -323,9 +323,8 @@ if __name__ == "__main__":
         results.append(seed_results)
         r += 1
 
-    a_file = open(os.path.join(output_dir, 'results.txt'), 'wb')
-    for row in results:
-        np.savetxt(a_file, row)
+        with open(os.path.join(output_dir, 'results.pkl'), 'wb') as fp:
+            pickle.dump(results, fp)
     
     flat_results = []
     for row in results:
