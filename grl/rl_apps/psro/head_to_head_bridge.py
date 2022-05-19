@@ -282,8 +282,13 @@ if __name__ == "__main__":
         print(f"@@@@@@@@@@@ max ckpt: {sorted(ckpt_mapping.keys())[-1]}")
         # import pdb; pdb.set_trace()
         ckpt_results = [] # len == num checkpoints to eval
+        ts_info = {}
         for ckpt, sp_iter in ckpt_mapping.items():
             print("######### running ckpt ", ckpt)
+            psro_ts = psro_iter2timestep[psro_seed_path][ckpt]
+            sp_ts = sp_iter2timestep[sp_seed_path][sp_iter]
+            ts_info[ckpt] = [psro_ts, sp_ts, sp_iter]
+            print(f"psro_timestep: {psro_ts}   sp_timestep: {sp_ts}")
             psro_specs_with_prob = get_all_psro_specs_with_prob(ckpt, psro_seed_path)
             sp_specs = get_all_sp_specs(sp_iter, sp_seed_path)
             player_combo_results = []  # len == 2
@@ -321,7 +326,13 @@ if __name__ == "__main__":
         plt.plot(ckpt_results, label=f'combo {r}')
         plt.axhline(y=0, color='r', linestyle='-')
         plt.legend(loc='lower right')
-        plt.savefig(os.path.join(output_dir, f'{scenario_name}_combo{r}_num_games_{num_games}'))
+        plt.savefig(os.path.join(output_dir, f'combo{r}_n{num_games}_{scenario_name}'))
+        with open(os.path.join(output_dir, f'combo{r}_data.pkl'), 'wb') as fp:
+            pickle.dump(ckpt_results, fp)
+        with open(os.path.join(output_dir, f'combo{r}_timestep_info.pkl'), 'wb') as fp:
+            pickle.dump(ts_info, fp)
+        with open(os.path.join(output_dir, f'combo{r}_seed_info.txt'), 'w') as text_file:
+            text_file.write(f"psro: {psro_seed_path}   sp: {sp_seed_path} \n")
         results.append(ckpt_results)
         r += 1
         #             player_combo_results.append(weighted_psro_rewards)
