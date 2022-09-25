@@ -197,7 +197,6 @@ def find_timestep_mapping(psro_path, sp_path):
                 mapping[psro_itr] = sp_itr
                 break
     mapping = {k: v for k, v in mapping.items() if v is not None} # only return mapped ckpts
-    import pdb; pdb.set_trace()
     return mapping
 
 def get_all_psro_specs_with_prob(ckpt, psro_seed_path):
@@ -291,8 +290,8 @@ if __name__ == "__main__":
     r = 0
     for psro_seed_path, sp_seed_path in product(psro_seeds_paths, sp_seeds_paths):
         ckpt_mapping = find_timestep_mapping(psro_seed_path, sp_seed_path)
+        # ckpt_mapping = {19: 2500}
         print(f"@@@@@@@@@@@ max ckpt: {sorted(ckpt_mapping.keys())[-1]}")
-        import pdb; pdb.set_trace()
         ckpt_results = [] # len == num checkpoints to eval
         ts_info = {}
         for ckpt, sp_iter in ckpt_mapping.items():
