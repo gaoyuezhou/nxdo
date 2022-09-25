@@ -66,6 +66,9 @@ import pickle
 import matplotlib.pyplot as plt
 
 
+from grl.rl_apps.centralized_critic_model_full_obs_larger_network_tiny_bridge_4p import TorchCentralizedCriticModelFullObsLargerModelTinyBridge
+from grl.rl_apps.centralized_critic_model_full_obs_larger_network_bridge_4p import TorchCentralizedCriticModelFullObsLargerModelBridge
+
 def load_metanash_pure_strat(policy: Policy, pure_strat_spec: StrategySpec):
     pure_strat_checkpoint_path = pure_strat_spec.metadata["checkpoint_path"]
     checkpoint_data = deepdish.io.load(path=pure_strat_checkpoint_path)
@@ -194,6 +197,7 @@ def find_timestep_mapping(psro_path, sp_path):
                 mapping[psro_itr] = sp_itr
                 break
     mapping = {k: v for k, v in mapping.items() if v is not None} # only return mapped ckpts
+    import pdb; pdb.set_trace()
     return mapping
 
 def get_all_psro_specs_with_prob(ckpt, psro_seed_path):
@@ -220,6 +224,10 @@ def get_all_sp_specs(sp_iter, sp_seed_path):
 
 
 if __name__ == "__main__":
+    ModelCatalog.register_custom_model(
+        "cc_model_full_obs_larger_tiny_bridge_4p", TorchCentralizedCriticModelFullObsLargerModelTinyBridge)
+    ModelCatalog.register_custom_model(
+        "cc_model_full_obs_larger_bridge", TorchCentralizedCriticModelFullObsLargerModelBridge)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--scenario_name", type=str, required=True)
@@ -230,12 +238,16 @@ if __name__ == "__main__":
 
     scenario_name = args.scenario_name
     num_games = args.num_games
-    if scenario_name == 'tiny_bridge_4p_psro':
-        psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
-        sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
-    elif scenario_name == 'bridge_psro':
-        psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
-        sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
+    if scenario_name == 'tiny_bridge_4p_psro_larger_model':
+        # psro_path = "/home/gaoyue/nxdo/grl/data/3_seeds_psro_tiny_bridge"
+        # sp_path = "/home/gaoyue/nxdo/grl/data/3_seeds_self_play_tiny_bridge"
+        psro_path = "/home/gaoyue/nxdo/grl/data/iclr/tiny_bridge_4p_psro_larger_model"
+        sp_path = "/home/gaoyue/nxdo/grl/data/iclr/tiny_bridge_self_play"
+    elif scenario_name == 'bridge_bidding_psro_larger_model':
+        # psro_path = "/home/gaoyue/nxdo/grl/data/2_seeds_psro_bridge"
+        # sp_path = "/home/gaoyue/nxdo/grl/data/2_seeds_self_play_bridge"
+        psro_path = "/home/gaoyue/nxdo/grl/data/iclr/bridge_bidding-team_psro" # TODO: change path to PSRO and SP checkpoints respectively
+        sp_path = "/home/gaoyue/nxdo/grl/data/iclr/bridge_bidding-self_play"
     else:
         raise NotImplementedError
 
@@ -280,7 +292,7 @@ if __name__ == "__main__":
     for psro_seed_path, sp_seed_path in product(psro_seeds_paths, sp_seeds_paths):
         ckpt_mapping = find_timestep_mapping(psro_seed_path, sp_seed_path)
         print(f"@@@@@@@@@@@ max ckpt: {sorted(ckpt_mapping.keys())[-1]}")
-        # import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         ckpt_results = [] # len == num checkpoints to eval
         ts_info = {}
         for ckpt, sp_iter in ckpt_mapping.items():
@@ -312,11 +324,10 @@ if __name__ == "__main__":
                                                                                 policies_for_each_player[1]])
                         # print(f"PSRO rew:  {payoffs_per_team_this_episode[psro_team]},    Weight:  {psro_spec_with_prob['weights'][psro_team]}")
                         weighted_psro_rewards.append(payoffs_per_team_this_episode[psro_team] * psro_spec_with_prob['weights'][psro_team])
-                        # weighted_psro_rewards.append(1 * psro_spec_with_prob['weights'][psro_team])
+                        # weighted_psro_rewards.append(np.random.randint(low=10) * psro_spec_with_prob['weights'][psro_team])
                     # print(f"PSRO avg rew:  {np.mean(weighted_psro_rewards)},    Weight:  {psro_spec_with_prob['weights'][psro_team]}")
                     assert len(weighted_psro_rewards) == num_games
                     policy_combo_results.append(np.mean(weighted_psro_rewards))
-                # import pdb; pdb.set_trace()
                 assert len(policy_combo_results) == len(psro_specs_with_prob)
                 player_combo_results.append(np.sum(policy_combo_results))
             assert len(player_combo_results) == 2
